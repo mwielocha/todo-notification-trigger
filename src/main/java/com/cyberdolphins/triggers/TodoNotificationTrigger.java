@@ -8,6 +8,7 @@ import org.apache.cassandra.config.ColumnDefinition;
 import org.apache.cassandra.db.Cell;
 import org.apache.cassandra.db.ColumnFamily;
 import org.apache.cassandra.db.Mutation;
+import org.apache.cassandra.db.RangeTombstone;
 import org.apache.cassandra.db.marshal.*;
 import org.apache.cassandra.triggers.ITrigger;
 import org.json.simple.JSONObject;
@@ -42,6 +43,11 @@ public class TodoNotificationTrigger implements ITrigger {
 
     public Collection<Mutation> augment(ByteBuffer partitionKey, ColumnFamily update) {
 
+        if(update.deletionInfo().hasRanges()) {
+            RangeTombstone rt = update.deletionInfo().rangeIterator().next();
+            rt.name().
+        }
+
         Map<String, Object> todo = new HashMap<String, Object>();
 
         CFMetaData metaData = update.metadata();
@@ -52,18 +58,34 @@ public class TodoNotificationTrigger implements ITrigger {
 
             ColumnDefinition columnDefinition = metaData.getColumnDefinition(cell.name());
 
+            String name = metaData.comparator.getString(cell.name());
+
+            String value = metaData.getValueValidator(cell.name())
+                    .getString(cell.value());
+
+            logger.info("Got cell: " + name + " -> " + value);
+
             if (columnDefinition == null) {
-                ByteBuffer first = CompositeType.extractComponent(cell.name().toByteBuffer(), 0);
-                boolean done = BooleanType.instance.compose(first);
 
-                ByteBuffer second = CompositeType.extractComponent(cell.name().toByteBuffer(), 1);
-                UUID id = TimeUUIDType.instance.compose(second);
+                ByteBuffer component = CompositeType.extractComponent(
+                        cell.name().toByteBuffer(), 0);
 
-                todo.put("done", done);
+                UUID id = TimeUUIDType.instance.compose(component);
                 todo.put("id", id + "");
+
             } else {
-                String name = UTF8Type.instance.compose(cell.value());
-                todo.put("name", name);
+
+                AbstractType<?> columnType = columnDefinition.type;
+
+                if(columnType instanceof UTF8Type) {
+                    String val = UTF8Type.instance.compose(cell.value());
+                    todo.put(columnDefinition.name.toString(), val);
+                }
+
+                if(columnType instanceof BooleanType) {
+                    Boolean val = BooleanType.instance.compose(cell.value());
+                    todo.put(columnDefinition.name.toString(), val);
+                }
 
             }
         }
@@ -77,8 +99,12 @@ public class TodoNotificationTrigger implements ITrigger {
                 event.put("todo", todo);
             }
 
+            String jsonString = JSONObject.toJSONString(event);
+
+            logger.info("Payload away:" + jsonString);
+
             channel.basicPublish(EXCHANGE, "", null,
-                    JSONObject.toJSONString(event).getBytes());
+                    jsonString.getBytes());
 
         } catch (IOException e) {
             logger.error("Error on publish", e);
