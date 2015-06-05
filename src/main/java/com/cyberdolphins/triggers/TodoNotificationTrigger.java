@@ -43,11 +43,6 @@ public class TodoNotificationTrigger implements ITrigger {
 
     public Collection<Mutation> augment(ByteBuffer partitionKey, ColumnFamily update) {
 
-        if(update.deletionInfo().hasRanges()) {
-            RangeTombstone rt = update.deletionInfo().rangeIterator().next();
-            rt.name().
-        }
-
         Map<String, Object> todo = new HashMap<String, Object>();
 
         CFMetaData metaData = update.metadata();
