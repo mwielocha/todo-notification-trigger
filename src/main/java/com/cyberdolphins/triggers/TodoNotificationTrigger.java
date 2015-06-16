@@ -38,7 +38,7 @@ public class TodoNotificationTrigger implements ITrigger {
         factory.setHost("localhost");
         connection = factory.newConnection();
         channel = connection.createChannel();
-        channel.exchangeDeclare(EXCHANGE, "fanout");
+        channel.exchangeDeclare(EXCHANGE, "fanout", true);
     }
 
     public Collection<Mutation> augment(ByteBuffer partitionKey, ColumnFamily update) {
